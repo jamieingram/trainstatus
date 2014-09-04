@@ -1,0 +1,10 @@
+# Files
+*.DS_Store
+*.pyc
+*.vagrant
+*.coverage
+*.psd
+settings.php
+
+# Dirs
+logs/
