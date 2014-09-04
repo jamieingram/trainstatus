@@ -17,6 +17,8 @@ departing from LST stopping at IPS
 */
 
 global $client;
+global $db;
+global $db_available;
 
 $queries_array = array();
 array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_ARRIVAL, $start, $end, TrainQuery::$QUERY_TYPE_FROM));
@@ -25,6 +27,20 @@ array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_DEPARTURE, $
 array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_DEPARTURE, $end, $start, TrainQuery::$QUERY_TYPE_TO));
 
 $client = new SoapClient($wsdl_url, array("trace" => 1, "exception" => 0));
+
+try {
+    $db = new mysqli($mysql_host, $mysql_user, $mysql_password, $mysql_db);
+
+    // Check connection
+    if ($mysqli->connect_errno) {
+        echo "Failed to connect to MySQL: (" . $mysqli->connect_errno . ") " . $mysqli->connect_error;
+    }else{
+        $db_available = true;
+        echo "db connected";
+    }
+} catch (Exception $e) {
+    echo "Cannot connected to database.";
+}
 
 $auth = new stdClass();
 $auth->TokenValue = $token;
@@ -72,6 +88,7 @@ class TrainQuery {
 
 class TrainService {
 
+    public $serviceID;
     public $location;
     public $from;
     public $from_code;
@@ -83,7 +100,6 @@ class TrainService {
     public $std;
     public $etd;
     public $atd;
-    public $id;
     public $platform;
     public $isCancelled;
     public $overdueMessage;
@@ -108,12 +124,12 @@ class TrainService {
         $this->eta = $service['eta'];
         $this->std = $service['std'];
         $this->etd = $service['etd'];
-        $this->id = $service['serviceID'];
+        $this->serviceID = $service['serviceID'];
         $this->platform = $service['platform'];
 
         //
-        if (!empty($this->id)) {
-            $result = $client->__soapCall('GetServiceDetails', array('parameters' => array('serviceID' => $this->id)));
+        if (!empty($this->serviceID)) {
+            $result = $client->__soapCall('GetServiceDetails', array('parameters' => array('serviceID' => $this->serviceID)));
             $result_array = obj2array($result);
             $result_array = $result_array['GetServiceDetailsResult'];
             $this->ata = $result_array['ata'];
@@ -174,12 +190,24 @@ class TrainService {
             print_r($this);
         }
     }
+    //
+    function save() {
+        foreach($this as $key => $value) {
+           //$row = mysql
+       }
+    }
+    //
+    function notify() {
+
+    }
 }
 
 
 function parseService($service, $method, $location_str) {
     $train_service = new TrainService($location_str);
     $train_service->parseService($service, $method);
+    $train_service->save();
+    $train_service->notify();
     return $train_service;
 
 }
