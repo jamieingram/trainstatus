@@ -1,5 +1,7 @@
 <?php
 include('config/settings.php');
+require 'PushBullet.class.php';
+
 if (empty($token)) {
     die("please create a config file, and include a value for \$token");
 }
@@ -19,6 +21,9 @@ departing from LST stopping at IPS
 global $client;
 global $db;
 global $db_available;
+global $push_bullet;
+global $push_bullet_enabled;
+global $devices_array;
 
 $queries_array = array();
 array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_ARRIVAL, $start, $end, TrainQuery::$QUERY_TYPE_FROM));
@@ -28,6 +33,19 @@ array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_DEPARTURE, $
 
 $client = new SoapClient($wsdl_url, array("trace" => 1, "exception" => 0));
 
+$push_bullet_enabled = true;
+
+if ($push_bullet_enabled) {
+    $push_bullet = new PushBullet($push_bullet_token);
+    $devices = $push_bullet->getDevices();
+    $devices = $devices->devices;
+    $devices_array = array();
+    for ($i=0; $i < count($devices); $i++) {
+        $device = $devices[$i];
+        array_push($devices_array, $device->iden);
+    }
+}
+
 try {
     $db = new mysqli($mysql_host, $mysql_user, $mysql_password, $mysql_db);
 
@@ -36,7 +54,6 @@ try {
         echo "Failed to connect to MySQL: (" . $mysqli->connect_errno . ") " . $mysqli->connect_error;
     }else{
         $db_available = true;
-        echo "db connected";
     }
 } catch (Exception $e) {
     echo "Cannot connected to database.";
@@ -90,9 +107,9 @@ class TrainService {
 
     public $serviceID;
     public $location;
-    public $from;
+    public $from_station;
     public $from_code;
-    public $to;
+    public $to_station;
     public $to_code;
     public $sta;
     public $eta;
@@ -107,6 +124,7 @@ class TrainService {
 
     public $isDelayed;
     public $delayLength;
+    public $notificationSent;
 
     function __construct($location_str) {
         $this->location = $location_str;
@@ -116,9 +134,9 @@ class TrainService {
     function parseService($service, $method) {
         global $client;
 
-        $this->from = $service['origin']['location']['locationName'];
+        $this->from_station = $service['origin']['location']['locationName'];
         $this->from_code = $service['origin']['location']['crs'];
-        $this->to = $service['destination']['location']['locationName'];
+        $this->to_station = $service['destination']['location']['locationName'];
         $this->to_code = $service['destination']['location']['crs'];
         $this->sta = $service['sta'];
         $this->eta = $service['eta'];
@@ -183,22 +201,68 @@ class TrainService {
                 }
             break;
         }
-        if ($this->isCancelled) {
-            print_r($this);
-        }
-        if ($this->delayLength > 30) {
-            print_r($this);
+        if ($this->isCancelled || $this->delayLength > 10) {
+            $this->notify();
         }
     }
     //
     function save() {
+        global $db;
+        $serviceID = $db->real_escape_string($this->serviceID);
+        $row = $db->query("select * from service where serviceID='".$serviceID."'");
+        if ($row->num_rows == 0) {
+            //insert a new row
+            $query = "insert into service set ";
+        }else{
+            //update the row
+            $query = "update service set ";
+        }
         foreach($this as $key => $value) {
-           //$row = mysql
-       }
+            $query .= $key."='".$db->real_escape_string($value)."',";
+        }
+
+        $query = substr($query, 0, strlen($query) - 1);
+        
+        if ($row->num_rows != 0) {
+            $query .= " where serviceID='".$serviceID."'";
+        }
+        
+        if (!$row = $db->query($query)) {
+            printf("Errormessage: %s\n", $db->error);
+        }
+        
     }
     //
     function notify() {
+        global $devices_array;
+        global $push_bullet_enabled;
+        global $push_bullet;
 
+        if (!empty($this->sta)) {
+            //this is an arrival service
+            $body = $this->from_code." - ".$this->to_code.". Due to arrive ".$this->sta;
+        }else{
+            $body = $this->from_code." - ".$this->to_code.". Due to depart ".$this->std;
+        }
+        if (!empty($this->platform)) {
+            " on platform ".$this->platform;
+        }
+        $body .= ".";
+
+        if ($this->isCancelled) {
+            $title = 'train cancelled';
+            $body .= "Train is cancelled.";
+            $this->notificationSent = 1;
+            $this->save();
+        }else if ($this->delayLength > 10) {
+            $title = 'train delayed';
+            $body .= "Delayed by ".$this->delayLength;
+        }
+        if ($push_bullet_enabled) {
+            foreach ($devices_array as $key => $value) {
+                $push_bullet->pushNote($value, $title, $body);
+            }
+        }
     }
 }
 
@@ -207,7 +271,6 @@ function parseService($service, $method, $location_str) {
     $train_service = new TrainService($location_str);
     $train_service->parseService($service, $method);
     $train_service->save();
-    $train_service->notify();
     return $train_service;
 
 }

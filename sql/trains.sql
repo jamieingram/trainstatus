@@ -27,11 +27,11 @@ DROP TABLE IF EXISTS `service`;
 
 CREATE TABLE `service` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `serviceID` varchar(20) NOT NULL DEFAULT '',
+  `serviceID` varchar(30) NOT NULL DEFAULT '',
   `location` varchar(30) NOT NULL DEFAULT '',
-  `from` varchar(30) NOT NULL DEFAULT '',
+  `from_station` varchar(30) NOT NULL DEFAULT '',
   `from_code` char(3) NOT NULL DEFAULT '',
-  `to` varchar(30) NOT NULL DEFAULT '',
+  `to_station` varchar(30) NOT NULL DEFAULT '',
   `to_code` char(3) NOT NULL DEFAULT '',
   `sta` varchar(10) NOT NULL DEFAULT '',
   `eta` varchar(10) NOT NULL DEFAULT '',
@@ -45,6 +45,8 @@ CREATE TABLE `service` (
   `distruptionReason` text,
   `isDelayed` tinyint(4) NOT NULL DEFAULT '0',
   `delayLength` int(11) DEFAULT NULL,
+  `notificationSent` tinyint(4) NOT NULL DEFAULT '0',
+  `lastUpdated` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
