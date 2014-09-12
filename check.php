@@ -105,6 +105,8 @@ class TrainQuery {
 
 class TrainService {
 
+    public static $EMPTY_DATE = '0000-00-00 00:00:00';
+
     public $serviceID;
     public $location;
     public $from_station;
@@ -124,7 +126,9 @@ class TrainService {
 
     public $isDelayed;
     public $delayLength;
+    public $creationDate;
     public $notificationSent;
+    public $lastUpdated;
 
     function __construct($location_str) {
         $this->location = $location_str;
@@ -163,6 +167,7 @@ class TrainService {
         if ($method == TrainQuery::$QUERY_METHOD_ARRIVAL) {
             //this is an arrival board service
             $estimated = $this->eta;
+            if (!empty($this->ata)) $estimated = $this->ata;
             $scheduled = $this->sta;
         }else{
             //this is a departure board service
@@ -192,17 +197,14 @@ class TrainService {
                     $scheduled_array[1] = intval($scheduled_array[1]);
                     $estimated_array[0] = intval($estimated_array[0]);
                     $estimated_array[1] = intval($estimated_array[1]);
-                    if ($estimated_array[0] < $scheduled_array[0]) {
+                    if ($estimated_array[0] - $scheduled_array[0] < -1) {
                         //the train is arriving after midnight - add 24 hours for calculation
                         $estimated_array[0] += 24;
                     }
                     $diff = ($estimated_array[0] * 60 + $estimated_array[1]) - ($scheduled_array[0] * 60 + $scheduled_array[1]);
-                    $this->delayLength = $diff; 
+                    $this->delayLength = $diff;
                 }
             break;
-        }
-        if ($this->isCancelled || $this->delayLength > 10) {
-            $this->notify();
         }
     }
     //
@@ -215,8 +217,20 @@ class TrainService {
             $query = "insert into service set ";
         }else{
             //update the row
+            $row_array = $row->fetch_array(MYSQLI_ASSOC);
+            $this->creationDate = $row_array['creationDate'];
+            if ($row_array['notificationSent'] != TrainService::$EMPTY_DATE) {
+                $this->notificationSent = $row_array['notificationSent'];
+            }
+            $this->lastUpdated = $row_array['lastUpdated'];
+            //
             $query = "update service set ";
         }
+
+        if (empty($this->creationDate) || $this->creationDate == TrainService::$EMPTY_DATE) {
+            $this->creationDate = date("Y-m-d H:i:s");
+        }
+
         foreach($this as $key => $value) {
             $query .= $key."='".$db->real_escape_string($value)."',";
         }
@@ -227,40 +241,62 @@ class TrainService {
             $query .= " where serviceID='".$serviceID."'";
         }
         
-        if (!$row = $db->query($query)) {
-            printf("Errormessage: %s\n", $db->error);
+        if (!$result = $db->query($query)) {
+            printf("Error message: %s\n", $db->error);
         }
-        
+        //
+        $row = $db->query("select * from service where serviceID='".$serviceID."'");
+        $row_array = $row->fetch_array(MYSQLI_ASSOC);
+        $this->creationDate = $row_array['creationDate'];
+        $this->lastUpdated = $row_array['lastUpdated'];
     }
     //
-    function notify() {
+    function check_notification() {
         global $devices_array;
         global $push_bullet_enabled;
         global $push_bullet;
 
-        if (!empty($this->sta)) {
-            //this is an arrival service
-            $body = $this->from_code." - ".$this->to_code.". Due to arrive ".$this->sta;
-        }else{
-            $body = $this->from_code." - ".$this->to_code.". Due to depart ".$this->std;
-        }
-        if (!empty($this->platform)) {
-            " on platform ".$this->platform;
-        }
-        $body .= ".";
+        $now = new DateTime();
 
-        if ($this->isCancelled) {
-            $title = 'train cancelled';
-            $body .= "Train is cancelled.";
-            $this->notificationSent = 1;
-            $this->save();
-        }else if ($this->delayLength > 10) {
-            $title = 'train delayed';
-            $body .= "Delayed by ".$this->delayLength;
+        if ($this->creationDate != TrainService::$EMPTY_DATE) {
+            $creationDate = new DateTime($this->creationDate);
+            $diff = $now->diff($creationDate);
+            if ($diff->h > 4) return;
         }
-        if ($push_bullet_enabled) {
-            foreach ($devices_array as $key => $value) {
-                $push_bullet->pushNote($value, $title, $body);
+
+        if ($this->notificationSent != TrainService::$EMPTY_DATE) {
+            $notificationSent = new DateTime($this->notificationSent);
+            $diff = $now->diff($notificationSent);
+            if (($diff->h * 60) + $diff->i < 10) return;
+        }
+
+        //check to see if we should send a notification
+        if ($this->isCancelled || $this->delayLength > 10) {
+            if (!empty($this->sta)) {
+                //this is an arrival service
+                $body = $this->from_code." - ".$this->to_code.". Due to arrive ".$this->sta;
+            }else{
+                $body = $this->from_code." - ".$this->to_code.". Due to depart ".$this->std;
+            }
+            if (!empty($this->platform)) {
+                " on platform ".$this->platform;
+            }
+            $body .= ".";
+
+            if ($this->isCancelled) {
+                $title = 'train cancelled';
+                $body .= "Train is cancelled.";
+            }else if ($this->delayLength > 10) {
+                $title = 'train delayed';
+                $body .= "Delayed by ".$this->delayLength;
+            }
+            //
+            if ($push_bullet_enabled) {
+                foreach ($devices_array as $key => $value) {
+                    $push_bullet->pushNote($value, $title, $body);
+                }
+                $this->notificationSent = date("Y-m-d H:i:s");
+                $this->save();
             }
         }
     }
@@ -271,11 +307,8 @@ function parseService($service, $method, $location_str) {
     $train_service = new TrainService($location_str);
     $train_service->parseService($service, $method);
     $train_service->save();
-    return $train_service;
-
+    $train_service->check_notification();
 }
-
-$trains_array = array();
 
 for ($i = 0; $i < count($queries_array); $i++) { 
     
@@ -298,13 +331,11 @@ for ($i = 0; $i < count($queries_array); $i++) {
             $services_array = $result_array['trainServices']['service'];
 
             if (is_null($services_array[0])) {
-                $train_service = parseService($services_array, $query->method, $location_str);
-                array_push($trains_array, $train_service);
+                parseService($services_array, $query->method, $location_str);
             }else{
                 for ($j = 0; $j < count($services_array) ; $j++) {
                     $service = $services_array[$j];
-                    $train_service = parseService($service, $query->method, $location_str);
-                    array_push($trains_array, $train_service);
+                    parseService($service, $query->method, $location_str);
                 }
             }
             //

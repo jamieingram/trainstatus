@@ -45,7 +45,8 @@ CREATE TABLE `service` (
   `distruptionReason` text,
   `isDelayed` tinyint(4) NOT NULL DEFAULT '0',
   `delayLength` int(11) DEFAULT NULL,
-  `notificationSent` tinyint(4) NOT NULL DEFAULT '0',
+  `creationDate` datetime NOT NULL,
+  `notificationSent` datetime DEFAULT NULL,
   `lastUpdated` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
