@@ -264,10 +264,12 @@ class TrainService {
             if ($diff->h > 4) return;
         }
 
-        if ($this->notificationSent != TrainService::$EMPTY_DATE) {
+        if ($this->notificationSent != TrainService::$EMPTY_DATE && !empty($this->notificationSent)) {
             $notificationSent = new DateTime($this->notificationSent);
             $diff = $now->diff($notificationSent);
-            if (($diff->h * 60) + $diff->i < 10) return;
+            if (($diff->h * 60) + $diff->i < 10) {
+                return;
+            }
         }
 
         //check to see if we should send a notification
