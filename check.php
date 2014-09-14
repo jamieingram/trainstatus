@@ -288,7 +288,7 @@ class TrainService {
             if ($this->isCancelled) {
                 $title = 'train cancelled';
                 $body .= "Train is cancelled.";
-            }else if ($this->delayLength > 10) {
+            }else if ($this->delayLength > 30) {
                 $title = 'train delayed';
                 $body .= "Delayed by ".$this->delayLength;
             }
