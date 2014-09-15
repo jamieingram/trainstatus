@@ -24,6 +24,7 @@ global $db_available;
 global $push_bullet;
 global $push_bullet_enabled;
 global $devices_array;
+global $delay_threshold;
 
 $queries_array = array();
 array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_ARRIVAL, $start, $end, TrainQuery::$QUERY_TYPE_FROM));
@@ -34,6 +35,7 @@ array_push($queries_array, new TrainQuery(TrainQuery::$QUERY_METHOD_DEPARTURE, $
 $client = new SoapClient($wsdl_url, array("trace" => 1, "exception" => 0));
 
 $push_bullet_enabled = true;
+$delay_threshold = 30;
 
 if ($push_bullet_enabled) {
     $push_bullet = new PushBullet($push_bullet_token);
@@ -255,6 +257,7 @@ class TrainService {
         global $devices_array;
         global $push_bullet_enabled;
         global $push_bullet;
+        global $delay_threshold;
 
         $now = new DateTime();
 
@@ -273,10 +276,12 @@ class TrainService {
         }
 
         //check to see if we should send a notification
-        if ($this->isCancelled || $this->delayLength > 10) {
+        if ($this->isCancelled || $this->delayLength > $delay_threshold) {
             if (!empty($this->sta)) {
                 //this is an arrival service
-                $body = $this->from_code." - ".$this->to_code.". Due to arrive ".$this->sta;
+                $arrival_time = $this->sta;
+                if ($this->eta != "On time") $arrival_time = $this->eta;
+                $body = $this->from_code." - ".$this->to_code.". Due to arrive ".$arrival_time;
             }else{
                 $body = $this->from_code." - ".$this->to_code.". Due to depart ".$this->std;
             }
@@ -288,7 +293,7 @@ class TrainService {
             if ($this->isCancelled) {
                 $title = 'train cancelled';
                 $body .= "Train is cancelled.";
-            }else if ($this->delayLength > 30) {
+            }else if ($this->delayLength > $delay_threshold) {
                 $title = 'train delayed';
                 $body .= "Delayed by ".$this->delayLength;
             }
