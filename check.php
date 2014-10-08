@@ -8,8 +8,10 @@ if (empty($token)) {
 if (empty($start)) $start = "IPS";
 if (empty($end)) $end = "LST";
 
-$wsdl_url = "https://realtime.nationalrail.co.uk/ldbws/wsdl.aspx";
+#$wsdl_url = "https://realtime.nationalrail.co.uk/ldbws/wsdl.aspx";
 $basicNamespace_str = "http://thalesgroup.com/RTTI/2010-11-01/ldb/commontypes";
+$wsdl_url = "https://lite.realtime.nationalrail.co.uk/OpenLDBWS/wsdl.aspx";
+#$basicNamespace_str = "http://thalesgroup.com/RTTI/2014-02-20/ldb/commontypes";
 
 /* queries to run:
 arriving at IPS coming from LST
@@ -44,7 +46,9 @@ if ($push_bullet_enabled) {
     $devices_array = array();
     for ($i=0; $i < count($devices); $i++) {
         $device = $devices[$i];
-        array_push($devices_array, $device->iden);
+        if ($device->type == "android") {
+            array_push($devices_array, $device->iden);
+        }
     }
 }
 
@@ -128,6 +132,7 @@ class TrainService {
 
     public $isDelayed;
     public $delayLength;
+    public $hasClaimed;
     public $creationDate;
     public $notificationSent;
     public $lastUpdated;
@@ -242,7 +247,6 @@ class TrainService {
         if ($row->num_rows != 0) {
             $query .= " where serviceID='".$serviceID."'";
         }
-        
         if (!$result = $db->query($query)) {
             printf("Error message: %s\n", $db->error);
         }
@@ -268,9 +272,10 @@ class TrainService {
         }
 
         if ($this->notificationSent != TrainService::$EMPTY_DATE && !empty($this->notificationSent)) {
+            if ($this->isCancelled) return;
             $notificationSent = new DateTime($this->notificationSent);
             $diff = $now->diff($notificationSent);
-            if (($diff->h * 60) + $diff->i < 10) {
+            if ((($diff->h * 60) + $diff->i) < 15) {
                 return;
             }
         }
@@ -280,7 +285,7 @@ class TrainService {
             if (!empty($this->sta)) {
                 //this is an arrival service
                 $arrival_time = $this->sta;
-                if ($this->eta != "On time") $arrival_time = $this->eta;
+                if ($this->eta != "On time" && $this->eta != "Delayed"  && $this->eta != "Cancelled") $arrival_time = $this->eta;
                 $body = $this->from_code." - ".$this->to_code.". Due to arrive ".$arrival_time;
             }else{
                 $body = $this->from_code." - ".$this->to_code.". Due to depart ".$this->std;
@@ -299,11 +304,11 @@ class TrainService {
             }
             //
             if ($push_bullet_enabled) {
+                $this->notificationSent = date("Y-m-d H:i:s");
+                $this->save();
                 foreach ($devices_array as $key => $value) {
                     $push_bullet->pushNote($value, $title, $body);
                 }
-                $this->notificationSent = date("Y-m-d H:i:s");
-                $this->save();
             }
         }
     }
@@ -330,13 +335,13 @@ for ($i = 0; $i < count($queries_array); $i++) {
 
     try {
         $result = $client->__soapCall($query->method, array('parameters' => $parameters));
-        $result_array = obj2array($result);
-        $result_array = $result_array[$query->method . 'Result'];
-        //parse the result looking for delays
+	$temp_array = obj2array($result);
+        $result_array = $temp_array[$query->method . 'Result'];
+	if (empty($result_array)) $result_array = $temp_array['GetStationBoardResult'];
+	//parse the result looking for delays
         $location_str = $result_array['locationName'];
-        if (!is_null($result_array['trainServices']['service'])) {
+	if (!is_null($result_array['trainServices']['service'])) {
             $services_array = $result_array['trainServices']['service'];
-
             if (is_null($services_array[0])) {
                 parseService($services_array, $query->method, $location_str);
             }else{
