@@ -303,12 +303,15 @@ class TrainService {
                 $body .= "Delayed by ".$this->delayLength;
             }
             //
-            if ($push_bullet_enabled) {
-                $this->notificationSent = date("Y-m-d H:i:s");
-                $this->save();
-                foreach ($devices_array as $key => $value) {
-                    $push_bullet->pushNote($value, $title, $body);
+            try {
+                if ($push_bullet_enabled) {
+                    $this->notificationSent = date("Y-m-d H:i:s");
+                    foreach ($devices_array as $key => $value) {
+                        $push_bullet->pushNote($value, $title, $body);
+                    }
                 }
+            } catch (Exception $e) {
+                echo "cannot send push bullet notifications";
             }
         }
     }
@@ -318,8 +321,8 @@ class TrainService {
 function parseService($service, $method, $location_str) {
     $train_service = new TrainService($location_str);
     $train_service->parseService($service, $method);
-    $train_service->save();
     $train_service->check_notification();
+    $train_service->save();
 }
 
 for ($i = 0; $i < count($queries_array); $i++) { 
