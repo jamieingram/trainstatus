@@ -279,7 +279,7 @@ class TrainService {
                 return;
             }
         }
-
+        
         //check to see if we should send a notification
         if ($this->isCancelled || $this->delayLength > $delay_threshold) {
             if (!empty($this->sta)) {
