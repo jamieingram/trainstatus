@@ -226,10 +226,9 @@ class TrainService {
             //update the row
             $row_array = $row->fetch_array(MYSQLI_ASSOC);
             $this->creationDate = $row_array['creationDate'];
-            if ($row_array['notificationSent'] != TrainService::$EMPTY_DATE) {
+            if (empty($this->notificationSent) && $row_array['notificationSent'] != TrainService::$EMPTY_DATE) {
                 $this->notificationSent = $row_array['notificationSent'];
             }
-            $this->lastUpdated = $row_array['lastUpdated'];
             //
             $query = "update service set ";
         }
@@ -270,7 +269,6 @@ class TrainService {
             $diff = $now->diff($creationDate);
             if ($diff->h > 4) return;
         }
-
         if ($this->notificationSent != TrainService::$EMPTY_DATE && !empty($this->notificationSent)) {
             if ($this->isCancelled) return;
             $notificationSent = new DateTime($this->notificationSent);
@@ -321,11 +319,13 @@ class TrainService {
 function parseService($service, $method, $location_str) {
     $train_service = new TrainService($location_str);
     $train_service->parseService($service, $method);
+    $train_service->save();
     $train_service->check_notification();
     $train_service->save();
 }
 
-for ($i = 0; $i < count($queries_array); $i++) { 
+for ($i = 0; $i < count($queries_array); $i++) {
+//for ($i = 0; $i < 1; $i++) { 
     
     $query = $queries_array[$i];
 
@@ -349,6 +349,7 @@ for ($i = 0; $i < count($queries_array); $i++) {
                 parseService($services_array, $query->method, $location_str);
             }else{
                 for ($j = 0; $j < count($services_array) ; $j++) {
+                //for ($j = 0; $j < 1 ; $j++) {
                     $service = $services_array[$j];
                     parseService($service, $query->method, $location_str);
                 }
