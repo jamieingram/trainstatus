@@ -8,10 +8,8 @@ if (empty($token)) {
 if (empty($start)) $start = "IPS";
 if (empty($end)) $end = "LST";
 
-#$wsdl_url = "https://realtime.nationalrail.co.uk/ldbws/wsdl.aspx";
 $basicNamespace_str = "http://thalesgroup.com/RTTI/2010-11-01/ldb/commontypes";
 $wsdl_url = "https://lite.realtime.nationalrail.co.uk/OpenLDBWS/wsdl.aspx";
-#$basicNamespace_str = "http://thalesgroup.com/RTTI/2014-02-20/ldb/commontypes";
 
 /* queries to run:
 arriving at IPS coming from LST
@@ -197,8 +195,8 @@ class TrainService {
             default:
                 $this->isDelayed = true;
                 //assume this is a time - calculate the difference between this and the sta
-                $scheduled_array = split(':',$scheduled);
-                $estimated_array = split(':',$estimated);
+                $scheduled_array = explode(':',$scheduled);
+                $estimated_array = explode(':',$estimated);
                 if (count($estimated_array) == 2) {
                     $scheduled_array[0] = intval($scheduled_array[0]);
                     $scheduled_array[1] = intval($scheduled_array[1]);
@@ -325,7 +323,6 @@ function parseService($service, $method, $location_str) {
 }
 
 for ($i = 0; $i < count($queries_array); $i++) {
-//for ($i = 0; $i < 1; $i++) { 
     
     $query = $queries_array[$i];
 
@@ -338,7 +335,7 @@ for ($i = 0; $i < count($queries_array); $i++) {
 
     try {
         $result = $client->__soapCall($query->method, array('parameters' => $parameters));
-	$temp_array = obj2array($result);
+	    $temp_array = obj2array($result);
         $result_array = $temp_array[$query->method . 'Result'];
 	if (empty($result_array)) $result_array = $temp_array['GetStationBoardResult'];
 	//parse the result looking for delays
