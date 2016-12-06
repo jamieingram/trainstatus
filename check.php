@@ -153,6 +153,8 @@ class TrainService {
         $this->etd = $service['etd'];
         $this->serviceID = $service['serviceID'];
         $this->platform = $service['platform'];
+        if (empty($this->platform)) $this->platform = 0;
+        $this->isCancelled = false;
 
         //
         if (!empty($this->serviceID)) {
@@ -215,6 +217,7 @@ class TrainService {
     //
     function save() {
         global $db;
+        $db->query("SET SESSION sql_mode = ''");
         $serviceID = $db->real_escape_string($this->serviceID);
         $row = $db->query("select * from service where serviceID='".$serviceID."'");
         if ($row->num_rows == 0) {
